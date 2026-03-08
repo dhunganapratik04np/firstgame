@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bowmaster Gun Style</title>
+<style>
+body{margin:0;font-family:Arial;text-align:center;background:#e0e0e0;}
+#scoreboard{margin:5px;}
+canvas{border:2px solid black; display:block; margin:auto; background:#fff;}
+</style>
+</head>
+<body>
+
+<div id="scoreboard">
+<h2>Score: <span id="score">0</span> | Level: <span id="level">1</span></h2>
+</div>
+
+<canvas id="gameCanvas" width="700" height="400"></canvas>
+
+<audio id="audio1" src="audio1.mp3" loop></audio>
+<audio id="audio2" src="audio2.mp3"></audio>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById("score");
+const levelEl = document.getElementById("level");
+const audio1 = document.getElementById("audio1");
+const audio2 = document.getElementById("audio2");
+
+let archerImg = new Image(); archerImg.src = 'archer.png';
+let targetImg = new Image(); targetImg.src = 'target.png';
+
+const canvasWidth = canvas.width;
+const canvasHeight = canvas.height;
+
+// Archer & gun (visually)
+let archer = {x:80, y:canvasHeight-120, width:90, height:90};
+let gunLength = 50;
+
+// Target
+let target = {x:canvasWidth-100, y:50, width:80, height:80, dir:1, speed:2.5};
+
+// Arrow (bullet)
+let arrow = {x:archer.x+gunLength, y:archer.y+45, width:40, height:6, angle:0, speed:12, moving:false};
+
+// Game state
+let score=0, level=1, aiming=false, aimY=archer.y+45;
+
+// Start background audio on first tap/click
+function startAudio(){
+    audio1.play().catch(()=>{});
+    window.removeEventListener('click', startAudio);
+    window.removeEventListener('touchstart', startAudio);
+}
+window.addEventListener('click', startAudio);
+window.addEventListener('touchstart', startAudio);
+
+// Aim with mouse/touch
+canvas.addEventListener('mousemove', (e)=>{
+    if(!arrow.moving){ aiming=true; aimY=e.clientY - canvas.getBoundingClientRect().top; }
+});
+canvas.addEventListener('touchmove', (e)=>{
+    e.preventDefault();
+    if(!arrow.moving){ aiming=true; aimY=e.touches[0].clientY - canvas.getBoundingClientRect().top; }
+}, {passive:false});
+
+// Shoot arrow
+canvas.addEventListener('click', shootArrow);
+canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); shootArrow(); }, {passive:false});
+
+function shootArrow(){
+    if(!arrow.moving){
+        arrow.moving=true;
+        arrow.x=archer.x+gunLength;
+        arrow.y=archer.y+45;
+        arrow.angle=Math.atan2(aimY-arrow.y, target.x-arrow.x);
+    }
+}
+
+// Play hit sound and handle background audio
+function playHitSound(){
+    audio1.pause(); audio1.currentTime=0;
+    audio2.currentTime=0; audio2.play().catch(()=>{});
+    audio2.onended = ()=>{ audio1.play().catch(()=>{}); };
+}
+
+// Draw dotted trajectory
+function drawTrajectory(){
+    let gunX = archer.x+30, gunY = archer.y+45;
+    let gunAngle = Math.atan2(aimY-gunY, target.x-gunX);
+    ctx.strokeStyle="rgba(0,0,0,0.5)";
+    ctx.setLineDash([5,5]);
+    ctx.beginPath();
+    ctx.moveTo(gunX, gunY);
+    for(let step=0; step<600; step+=20){
+        let tx = gunX + Math.cos(gunAngle)*step;
+        let ty = gunY + Math.sin(gunAngle)*step;
+        ctx.lineTo(tx, ty);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+// Main draw loop
+function draw(){
+    ctx.clearRect(0,0,canvasWidth,canvasHeight);
+
+    // Move target
+    target.y += target.dir*target.speed;
+    if(target.y>canvasHeight-target.height || target.y<0) target.dir*=-1;
+    ctx.drawImage(targetImg,target.x,target.y,target.width,target.height);
+
+    // Draw archer
+    ctx.drawImage(archerImg,archer.x,archer.y,archer.width,archer.height);
+
+    // Draw gun (rotating)
+    let gunX = archer.x+30, gunY = archer.y+45;
+    let gunAngle = Math.atan2(aimY-gunY, target.x-gunX);
+    ctx.save();
+    ctx.translate(gunX,gunY);
+    ctx.rotate(gunAngle);
+    ctx.fillStyle="#555"; // Gun color
+    ctx.fillRect(0,-4,gunLength,8); // Gun barrel
+    ctx.fillRect(-10,-2,10,4);      // Optional handle
+    ctx.restore();
+
+    // Dotted trajectory
+    if(!arrow.moving && aiming) drawTrajectory();
+
+    // Move arrow
+    if(arrow.moving){
+        arrow.x += Math.cos(arrow.angle)*arrow.speed;
+        arrow.y += Math.sin(arrow.angle)*arrow.speed;
+
+        ctx.save();
+        ctx.translate(arrow.x, arrow.y);
+        ctx.rotate(arrow.angle);
+        ctx.fillStyle="black";
+        ctx.fillRect(0,-3,40,6); // Arrow/bullet
+        ctx.restore();
+
+        // Collision
+        if(arrow.x+40>target.x && arrow.x<target.x+target.width &&
+           arrow.y>target.y && arrow.y<target.y+target.height){
+               arrow.moving=false;
+               playHitSound();
+               score++; level++;
+               scoreEl.innerText=score;
+               levelEl.innerText=level;
+               target.speed += 0.7;
+        }
+
+        // Offscreen reset
+        if(arrow.x>canvasWidth || arrow.y<0 || arrow.y>canvasHeight){
+            arrow.moving=false;
+        }
+    }
+
+    requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+
+</body>
+</html>
